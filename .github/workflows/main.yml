@@ -1,0 +1,67 @@
+name: Windows RDP via Tailscale (Untuk Pengguna Android)
+
+on:
+  workflow_dispatch:
+    inputs:
+      rdp_duration:
+        description: 'Durasi RDP (maks 6 jam, format: PT6H)'
+        required: false
+        default: 'PT6H'
+
+jobs:
+  rdp_via_tailscale:
+    # Menggunakan runner Windows Server 2022 (mirip Win 11)
+    runs-on: windows-2022
+    timeout-minutes: 360 # Maksimal 6 jam
+    
+    steps:
+    
+    # --- 1. Koneksi Tailscale ---
+    - name: Mengkoneksikan ke Tailscale Network
+      uses: tailscale/github-action@v2
+      with:
+        authkey: ${{ secrets.TAILSCALE_AUTHKEY }}
+        hostname: github-rdp-win # Nama node di Tailscale Anda
+        
+    # --- 2. Mengaktifkan RDP dan Mengatur User ---
+    - name: Mengaktifkan RDP dan Mengatur User
+      id: rdp_setup
+      run: |
+        $User = "android_user"
+        $Pass = "Android@P@ss123" # PENTING: GANTI password ini dengan yang kuat!
+        
+        # Mengaktifkan Remote Desktop
+        Write-Host "Mengaktifkan koneksi RDP..."
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
+        Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+        
+        # Membuat user baru dan menambahkannya ke grup administrator
+        Write-Host "Membuat user RDP..."
+        net user $User $Pass /add
+        net localgroup administrators $User /add
+        
+        # Output info koneksi ke log
+        Write-Host "::set-output name=username::$User"
+        Write-Host "::set-output name=password::$Pass"
+        
+    # --- 3. Menampilkan Detail Koneksi ---
+    - name: Menampilkan Detail Koneksi RDP
+      run: |
+        # Mendapatkan alamat IP Tailscale dari runner
+        $TailscaleIP = (tailscale ip -4)
+        
+        Write-Host "============================================="
+        Write-Host "    DETAIL KONEKSI RDP VIA TAILSCALE         "
+        Write-Host "============================================="
+        Write-Host "HOST/IP (Gunakan di Android): $TailscaleIP"
+        Write-Host "HOSTNAME (Opsi): github-rdp-win.ts.net"
+        Write-Host "USERNAME: ${{ steps.rdp_setup.outputs.username }}"
+        Write-Host "PASSWORD: ${{ steps.rdp_setup.outputs.password }}"
+        Write-Host "============================================="
+        Write-Host "Pastikan aplikasi Tailscale di Android Anda sudah terhubung."
+
+    # --- 4. Menjaga RDP Tetap Aktif ---
+    - name: RDP Aktif (JANGAN TUTUP)
+      run: |
+        Write-Host "RDP aktif. Jangan tutup jendela Actions ini. Runner akan berjalan selama 6 jam..."
+        Start-Sleep -Seconds 21600 # 6 jam
